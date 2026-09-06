@@ -1,0 +1,25 @@
+name: Pull Docker Images
+on:
+  workflow_dispatch:
+
+jobs:
+  pull:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull and save images
+        run: |
+          images="nextcloud:latest gitea/gitea:latest louislam/uptime-kuma:latest n8nio/n8n:latest containrrr/watchtower:latest linuxserver/duplicati:latest libretranslate/libretranslate:latest binwiederhier/ntfy:latest amir20/dozzle:latest codercom/code-server:latest ghcr.io/paperless-ngx/paperless-ngx:latest ghcr.io/immich-app/immich-server:release ghcr.io/gethomepage/homepage:latest ghcr.io/c4illin/convertx:latest"
+          mkdir -p out
+          for img in $images; do
+            docker pull "$img"
+            fname=$(echo "$img" | tr '/:' '__')
+            docker save "$img" -o "out/${fname}.tar"
+          done
+          cd out && tar -cf ../all-images.tar *.tar
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-images
+          path: all-images.tar
+          retention-days: 3
