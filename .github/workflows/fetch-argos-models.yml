@@ -1,0 +1,60 @@
+name: Fetch Argos Translate Models
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download index and all models
+        run: |
+          mkdir -p argos_models
+          curl -s https://raw.githubusercontent.com/argosopentech/argospm-index/main/index.json -o index.json
+          python3 - << 'EOF'
+          import json, os, urllib.request
+
+          with open("index.json") as f:
+              packages = json.load(f)
+
+          def name_for(pkg):
+              if "code" in pkg:
+                  return pkg["code"] + ".argosmodel"
+              t = pkg.get("type", "translate")
+              return f"{t}-{pkg.get('from_code','x')}_{pkg.get('to_code','x')}.argosmodel"
+
+          ok, fail = [], []
+          for pkg in packages:
+              fname = name_for(pkg)
+              dest = os.path.join("argos_models", fname)
+              done = False
+              for link in pkg.get("links", []):
+                  if not link.startswith("http"):
+                      continue
+                  try:
+                      req = urllib.request.Request(link, headers={"User-Agent": "Mozilla/5.0"})
+                      with urllib.request.urlopen(req, timeout=60) as resp, open(dest, "wb") as out:
+                          out.write(resp.read())
+                      if os.path.getsize(dest) > 1000:
+                          done = True
+                          break
+                  except Exception as e:
+                      print(f"fail {link}: {e}")
+              (ok if done else fail).append(fname)
+              print(("OK  " if done else "FAIL"), fname)
+
+          print(f"\n{len(ok)} ok, {len(fail)} failed")
+          if fail:
+              print("Failed:", fail)
+          EOF
+
+      - name: Archive models
+        run: tar -czf argos_models.tar.gz argos_models
+
+      - name: Upload as release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: argos-models-${{ github.run_id }}
+          files: argos_models.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
